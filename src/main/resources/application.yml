@@ -1,0 +1,67 @@
+server:
+  port: 8080
+  tomcat:
+    threads:
+      max: 400
+    accept-count: 2000
+    max-connections: 20000
+
+spring:
+  threads:
+    virtual:
+      enabled: true            # Java 21 virtual threads for request handling
+  datasource:
+    url: jdbc:postgresql://localhost:5432/voting
+    username: voting
+    password: voting
+    hikari:
+      maximum-pool-size: 10    # tiny on purpose: Kafka batching means the DB never needs more
+  sql:
+    init:
+      mode: always             # runs schema.sql
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      compression-type: lz4
+      batch-size: 65536
+      properties:
+        linger.ms: 5
+        enable.idempotence: true
+        spring.json.add.type.headers: false
+    consumer:
+      group-id: vote-aggregator
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      max-poll-records: 1000
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.value.default.type: com.voting.dto.VoteEvent
+        spring.json.trusted.packages: com.voting.dto
+        spring.json.use.type.headers: false
+    listener:
+      type: batch
+      ack-mode: batch
+      concurrency: 3           # 3 consumer threads, one per partition subset
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+
+voting:
+  vote-ttl: 24h
+  topic: votes.v1
+  partitions: 6
+  polls:
+    - id: poll-1
+      title: Which language should we learn next?
+      options: [Java, Go, Rust, Python]
